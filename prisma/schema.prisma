@@ -1,0 +1,281 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- Auth.js ----------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  role          UserRole  @default(USER)
+  consentAt     DateTime?
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  subscriptions Subscription[]
+  documents     UserDocument[]
+  auditLogs     AuditLog[]
+  templateVersionsCreated DocumentTemplateVersion[]
+
+  @@index([email])
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------- Billing ----------
+
+model Plan {
+  id                    String   @id @default(cuid())
+  name                  String
+  slug                  String   @unique
+  priceCents            Int
+  interval              PlanInterval
+  documentLimitPerMonth Int?
+  watermark             Boolean  @default(true)
+  features              Json     @default("[]")
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  subscriptions Subscription[]
+}
+
+enum PlanInterval {
+  MONTHLY
+  YEARLY
+  FREE
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  userId                 String
+  planId                 String
+  status                 SubscriptionStatus @default(ACTIVE)
+  provider               PaymentProvider
+  providerSubscriptionId String?            @unique
+  currentPeriodEnd       DateTime?
+  cancelAtPeriodEnd      Boolean            @default(false)
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan     Plan       @relation(fields: [planId], references: [id])
+  payments Payment[]
+
+  @@index([userId])
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum PaymentProvider {
+  MERCADO_PAGO
+  STRIPE
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  subscriptionId    String
+  amountCents       Int
+  status            PaymentStatus
+  provider          PaymentProvider
+  providerPaymentId String        @unique
+  paidAt            DateTime?
+  createdAt         DateTime      @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REFUNDED
+}
+
+// ---------- Catalog ----------
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  icon        String?
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  templates DocumentTemplate[]
+}
+
+model DocumentTemplate {
+  id              String                @id @default(cuid())
+  name            String
+  slug            String                @unique
+  categoryId      String
+  description     String
+  whenToUse       String
+  howToUse        String
+  faq             Json                  @default("[]")
+  status          TemplateStatus        @default(DRAFT)
+  isPremiumOnly   Boolean               @default(false)
+  seoTitle        String?
+  seoDescription  String?
+  activeVersionId String?               @unique
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  publishedAt     DateTime?
+
+  category      Category                   @relation(fields: [categoryId], references: [id])
+  versions      DocumentTemplateVersion[]  @relation("TemplateVersions")
+  activeVersion DocumentTemplateVersion?   @relation("ActiveVersion", fields: [activeVersionId], references: [id])
+  documents     UserDocument[]
+
+  @@index([categoryId])
+  @@index([status])
+}
+
+enum TemplateStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model DocumentTemplateVersion {
+  id            String   @id @default(cuid())
+  templateId    String
+  version       Int
+  fieldsSchema  Json
+  contentSchema Json
+  changelog     String?
+  createdAt     DateTime @default(now())
+  createdById   String?
+
+  template       DocumentTemplate  @relation("TemplateVersions", fields: [templateId], references: [id], onDelete: Cascade)
+  activeFor      DocumentTemplate? @relation("ActiveVersion")
+  createdBy      User?             @relation(fields: [createdById], references: [id])
+  userDocuments  UserDocument[]
+
+  @@unique([templateId, version])
+}
+
+// ---------- Documents ----------
+
+model UserDocument {
+  id                String             @id @default(cuid())
+  userId            String
+  templateId        String
+  templateVersionId String
+  title             String
+  data              Json
+  status            UserDocumentStatus @default(DRAFT)
+  isFavorite        Boolean            @default(false)
+  pdfBlobUrl        String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  lastGeneratedAt   DateTime?
+
+  user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template       DocumentTemplate        @relation(fields: [templateId], references: [id])
+  templateVersion DocumentTemplateVersion @relation(fields: [templateVersionId], references: [id])
+  downloadLogs   DocumentDownloadLog[]
+
+  @@index([userId, createdAt])
+  @@index([templateId])
+}
+
+enum UserDocumentStatus {
+  DRAFT
+  COMPLETED
+}
+
+model DocumentDownloadLog {
+  id             String   @id @default(cuid())
+  userDocumentId String
+  userId         String
+  format         String   @default("pdf")
+  createdAt      DateTime @default(now())
+
+  userDocument UserDocument @relation(fields: [userDocumentId], references: [id], onDelete: Cascade)
+
+  @@index([userDocumentId])
+  @@index([userId, createdAt])
+}
+
+// ---------- Audit ----------
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
