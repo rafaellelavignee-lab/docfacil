@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation"
 
 import { getPublishedTemplateBySlug } from "@/modules/templates/queries/get-template-by-slug"
+import { getDocumentPriceCents } from "@/modules/billing/use-cases/purchase-document-credit"
 import type { FieldSchema } from "@/modules/templates/domain/field-schema"
 import { NewDocumentForm } from "./new-document-form"
 
@@ -22,7 +23,11 @@ export default async function NewDocumentPage({
         <h1 className="text-2xl font-semibold tracking-tight">{template.name}</h1>
         <p className="text-muted-foreground mt-1 text-sm">{template.description}</p>
       </div>
-      <NewDocumentForm templateSlug={slug} fields={fields} />
+      <NewDocumentForm
+        templateSlug={slug}
+        fields={fields}
+        documentPriceCents={getDocumentPriceCents()}
+      />
     </div>
   )
 }

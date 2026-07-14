@@ -17,16 +17,18 @@ model User {
   image         String?
   passwordHash  String?
   role          UserRole  @default(USER)
+  cnpj          String?   @unique
   consentAt     DateTime?
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts      Account[]
-  sessions      Session[]
-  subscriptions Subscription[]
-  documents     UserDocument[]
-  auditLogs     AuditLog[]
+  accounts          Account[]
+  sessions          Session[]
+  subscriptions     Subscription[]
+  documents         UserDocument[]
+  documentPurchases DocumentPurchase[]
+  auditLogs         AuditLog[]
   templateVersionsCreated DocumentTemplateVersion[]
 
   @@index([email])
@@ -150,6 +152,26 @@ enum PaymentStatus {
   REFUNDED
 }
 
+// Compra avulsa de 1 documento (contas empresa, fora da cota mensal do plano).
+model DocumentPurchase {
+  id                   String        @id @default(cuid())
+  userId               String
+  status               PaymentStatus @default(PENDING)
+  amountCents          Int
+  provider             PaymentProvider @default(MERCADO_PAGO)
+  preferenceId         String?       @unique
+  providerPaymentId    String?       @unique
+  consumedByDocumentId String?       @unique
+  createdAt            DateTime      @default(now())
+  paidAt               DateTime?
+
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  consumedByDocument UserDocument? @relation(fields: [consumedByDocumentId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+}
+
 // ---------- Catalog ----------
 
 model Category {
@@ -237,6 +259,7 @@ model UserDocument {
   template       DocumentTemplate        @relation(fields: [templateId], references: [id])
   templateVersion DocumentTemplateVersion @relation(fields: [templateVersionId], references: [id])
   downloadLogs   DocumentDownloadLog[]
+  purchaseConsumed DocumentPurchase?
 
   @@index([userId, createdAt])
   @@index([templateId])

@@ -5,6 +5,7 @@ import { z } from "zod"
 
 import { auth } from "@/lib/auth"
 import { container } from "@/lib/container"
+import { isValidCNPJ } from "@/lib/validators/cnpj"
 
 export interface UpdateProfileState {
   error?: string
@@ -30,5 +31,32 @@ export async function updateProfileAction(
   await container.userRepository.updateName(session.user.id, parsed.data.name)
   revalidatePath("/painel/perfil")
 
+  return { success: true }
+}
+
+export interface UpdateCnpjState {
+  error?: string
+  success?: boolean
+}
+
+export async function updateCnpjAction(
+  _prevState: UpdateCnpjState,
+  formData: FormData
+): Promise<UpdateCnpjState> {
+  const session = await auth()
+  if (!session?.user) return { error: "Sessão expirada." }
+
+  const cnpj = String(formData.get("cnpj") ?? "").replace(/\D/g, "")
+  if (!isValidCNPJ(cnpj)) {
+    return { error: "CNPJ inválido. Confira os números digitados." }
+  }
+
+  try {
+    await container.userRepository.updateCnpj(session.user.id, cnpj)
+  } catch {
+    return { error: "Este CNPJ já está cadastrado em outra conta." }
+  }
+
+  revalidatePath("/painel/perfil")
   return { success: true }
 }

@@ -3,7 +3,9 @@ import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { container } from "@/lib/container"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Separator } from "@/components/ui/separator"
 import { ProfileForm } from "./profile-form"
+import { CompanyForm } from "./company-form"
 
 export default async function PerfilPage() {
   const session = await auth()
@@ -40,6 +42,10 @@ export default async function PerfilPage() {
       </div>
 
       <ProfileForm defaultName={user.name ?? ""} />
+
+      <Separator />
+
+      <CompanyForm defaultCnpj={user.cnpj} />
     </div>
   )
 }
